@@ -4,7 +4,17 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "pymupdf>=1.28.0",
+    "pytesseract>=0.3.10",
+    "pdf2image>=1.17.0",
+    "pillow>=10.0.0",
+    "numpy>=1.24.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "openai>=1.0.0",
+    "chromadb>=0.4.0",
+]
 
 [dependency-groups]
 dev = [
