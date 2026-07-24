@@ -11,3 +11,24 @@ wheels/
 
 # ENV
 .env
+
+# Storage, traces, and caches
+.chroma/
+traces/
+output/
+.pytest_cache/
+.ruff_cache/
+.uv_cache/
+.uv_python/
+*.log
+
+# IDE & System files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Temporary pip build files
+pip-*

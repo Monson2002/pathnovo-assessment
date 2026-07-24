@@ -1,0 +1,27 @@
+{
+  "pair_id": "pair_01",
+  "pid_a": "data/samples/pair_01/Export Gas Compressor-P&ID (1).pdf",
+  "pid_b": "data/samples/pair_01/Lift Gas compressor-P&ID.pdf",
+  "expected_deltas": [
+    {
+      "change_type": "modified",
+      "item_type": "text",
+      "page": 1,
+      "description": "Title changed from 'Export Gas Compressor' to 'Lift Gas Compressor'",
+      "old_value": "EXPORT GAS COMPRESSOR",
+      "new_value": "LIFT GAS COMPRESSOR"
+    }
+  ],
+  "qa_pairs": [
+    {
+      "question": "What is the document title of PID A?",
+      "expected_answer_contains": ["Export Gas Compressor"],
+      "expected_sources": ["pid_a"]
+    },
+    {
+      "question": "What is the main difference between the two document titles?",
+      "expected_answer_contains": ["Lift Gas Compressor", "Export Gas Compressor"],
+      "expected_sources": ["delta_report", "pid_a", "pid_b"]
+    }
+  ]
+}
