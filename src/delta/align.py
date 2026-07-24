@@ -5,6 +5,7 @@ from src.canonical.model import BoundingBox, TextBlock
 
 MIN_TEXT_SIMILARITY: float = 0.25
 HIGH_IOU_THRESHOLD: float = 0.5
+MAX_SEARCH_RADIUS: float = 0.5  # Normalized distance pruning radius
 
 
 def bbox_iou(a: BoundingBox, b: BoundingBox) -> float:
@@ -64,7 +65,7 @@ def align_blocks(
     text_threshold: float = 0.4,
     spatial_weight: float = 0.3,
 ) -> Tuple[List[Tuple[TextBlock, TextBlock, float]], List[TextBlock], List[TextBlock]]:
-    """Align text blocks between revision A and revision B on a single page.
+    """Align text blocks between revision A and revision B on a single page with spatial pruning.
 
     Returns:
         matched: List of (block_a, block_b, similarity_score)
@@ -74,6 +75,20 @@ def align_blocks(
     candidates = []
     for idx_a, block_a in enumerate(page_a_blocks):
         for idx_b, block_b in enumerate(page_b_blocks):
+            # Fast spatial & length pruning to eliminate impossible matches
+            c_dist = bbox_center_distance(block_a.bbox, block_b.bbox)
+            content_a_lower = block_a.content.lower().strip()
+            content_b_lower = block_b.content.lower().strip()
+
+            # Skip candidate if too far away AND content doesn't share prefix/similarity
+            if c_dist > MAX_SEARCH_RADIUS:
+                if (
+                    not content_a_lower
+                    or not content_b_lower
+                    or content_a_lower[0] != content_b_lower[0]
+                ):
+                    continue
+
             score = calculate_similarity_score(
                 block_a, block_b, spatial_weight=spatial_weight
             )

@@ -66,7 +66,7 @@ class NativePDFAdapter(FormatAdapter):
                                     )
                                 )
 
-                # Extract vector graphics / drawing paths
+                # Extract vector graphics / drawing paths accurately from drawing["items"]
                 drawing_elements = []
                 try:
                     for drawing in fitz_page.get_drawings():
@@ -78,15 +78,17 @@ class NativePDFAdapter(FormatAdapter):
                             y1 = max(y0 + 0.0001, min(1.0, rect[3] / h))
                             bbox = BoundingBox(x0=x0, y0=y0, x1=x1, y1=y1)
 
-                            # Determine drawing element type safely
-                            raw_type = str(drawing.get("type", "path")).lower()
+                            # Determine drawing element type accurately from path items
+                            items = drawing.get("items", [])
+                            item_cmd_types = set(item[0] for item in items if item)
+
                             elem_type = "path"
-                            if "line" in raw_type or "l" in raw_type:
-                                elem_type = "line"
-                            elif "rect" in raw_type or "r" in raw_type:
+                            if "re" in item_cmd_types:
                                 elem_type = "rect"
-                            elif "circle" in raw_type or "c" in raw_type:
+                            elif "c" in item_cmd_types:
                                 elem_type = "circle"
+                            elif "l" in item_cmd_types:
+                                elem_type = "line"
 
                             drawing_elements.append(
                                 DrawingElement(
@@ -96,6 +98,7 @@ class NativePDFAdapter(FormatAdapter):
                                         "color": drawing.get("color"),
                                         "fill": drawing.get("fill"),
                                         "width": drawing.get("width"),
+                                        "item_count": len(items),
                                     },
                                 )
                             )

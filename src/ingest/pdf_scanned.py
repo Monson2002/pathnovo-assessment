@@ -1,4 +1,5 @@
 import os
+import fitz
 import numpy as np
 from src.canonical.model import (
     BoundingBox,
@@ -23,7 +24,9 @@ class ScannedPDFAdapter(FormatAdapter):
         return os.path.exists(file_path)
 
     def ingest(self, file_path: str, pid: str) -> CanonicalDocument:
-        logger.info(f"Ingesting scanned PDF with OCR: {file_path} (PID: {pid})")
+        logger.info(
+            f"Ingesting scanned PDF with streaming page OCR: {file_path} (PID: {pid})"
+        )
         try:
             from pdf2image import convert_from_path
             import pytesseract
@@ -36,15 +39,29 @@ class ScannedPDFAdapter(FormatAdapter):
             ) from e
 
         dpi = getattr(settings, "ocr_dpi", 300)
+
+        # Get total page count cleanly
         try:
-            images = convert_from_path(file_path, dpi=dpi)
-        except Exception as e:
-            logger.error(f"Failed to convert PDF pages to images for {file_path}: {e}")
-            raise
+            with fitz.open(file_path) as doc:
+                total_pages = len(doc)
+        except Exception:
+            total_pages = 1
 
         pages = []
 
-        for i, img in enumerate(images):
+        # Process page-by-page streaming to save RAM memory
+        for i in range(1, total_pages + 1):
+            try:
+                images = convert_from_path(
+                    file_path, dpi=dpi, first_page=i, last_page=i
+                )
+                if not images:
+                    continue
+                img = images[0]
+            except Exception as e:
+                logger.error(f"Failed to convert page {i} of PDF to image: {e}")
+                continue
+
             w, h = float(img.size[0]), float(img.size[1])
             w = max(w, 1.0)
             h = max(h, 1.0)
@@ -88,7 +105,7 @@ class ScannedPDFAdapter(FormatAdapter):
 
             pages.append(
                 Page(
-                    page_number=i + 1,
+                    page_number=i,
                     width=w,
                     height=h,
                     text_blocks=text_blocks,

@@ -28,13 +28,7 @@ class DocumentIndex:
         else:
             self.client = chromadb.Client()
 
-        # Delete existing collection if any to allow fresh indexing per pair
-        try:
-            self.client.delete_collection(name=self.collection_name)
-        except Exception:
-            pass
-
-        self.collection = self.client.create_collection(
+        self.collection = self.client.get_or_create_collection(
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"},
         )
@@ -158,7 +152,7 @@ class DocumentIndex:
                 count += 1
 
         if documents:
-            self.collection.add(
+            self.collection.upsert(
                 documents=documents,
                 embeddings=embeddings,
                 metadatas=metadatas,

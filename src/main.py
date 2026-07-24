@@ -4,6 +4,7 @@ import sys
 from src.chat import AnswerEngine, DocumentIndex
 from src.delta import DeltaEngine, generate_delta_report
 from src.ingest import detect_and_ingest
+from src.markup import generate_delta_markup
 from src.observability import Tracer, get_logger, setup_logging
 
 logger = get_logger(__name__)
@@ -87,11 +88,18 @@ def main() -> int:
             print(f"  Delta Summary: {delta_res.summary}")
 
         with tracer.span("generate_report"):
-            logger.info("Stage 3: Generating delta report")
+            logger.info("Stage 3: Generating delta report & visual redline overlay")
             md_content, json_content = generate_delta_report(
                 delta_res, output_dir=args.output_dir
             )
+            markup_path = generate_delta_markup(
+                args.pid_b,
+                delta_res,
+                output_path=os.path.join(args.output_dir, "annotated_delta.pdf"),
+            )
             print(f"  Saved Delta Reports to: {args.output_dir}/")
+            if markup_path:
+                print(f"  Saved Visual Redline Markup to: {markup_path}")
 
         trace_path = tracer.finish(output_dir=os.path.join(args.output_dir, "traces"))
         logger.info(f"Observability trace written to {trace_path}")

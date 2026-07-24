@@ -1,5 +1,5 @@
 import re
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from src.chat.index import DocumentIndex
 from src.chat.llm import get_llm_client
@@ -102,11 +102,20 @@ class AnswerEngine:
     def __init__(self, index: DocumentIndex, llm_client=None):
         self.index = index
         self.llm_client = llm_client
+        self.history: List[Dict[str, str]] = []
+
+    def clear_history(self) -> None:
+        """Clear active conversation history."""
+        self.history = []
 
     def answer_question(
-        self, question: str, top_k: int = 5, tracer=None
+        self,
+        question: str,
+        top_k: int = 5,
+        tracer=None,
+        chat_history: Optional[List[Dict[str, str]]] = None,
     ) -> AnswerResult:
-        """Retrieve relevant context and generate a grounded answer with citations."""
+        """Retrieve relevant context and generate a grounded answer with citations and multi-turn history."""
         logger.info(f"Answering query: '{question}' (top_k={top_k})")
         # 1. Retrieve top-k context chunks from ChromaDB
         chunks = self.index.search(question, top_k=top_k)
@@ -129,6 +138,13 @@ class AnswerEngine:
             "Provide a clear, direct answer with citations."
         )
 
+        # Build messages payload including system prompt, rolling chat history, and current question
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        active_history = chat_history if chat_history is not None else self.history
+        for msg in active_history[-6:]:  # include up to last 3 Q&A turns
+            messages.append(msg)
+        messages.append({"role": "user", "content": user_prompt})
+
         # 2. Call LLM (or return fallback if offline/no key)
         client = self.llm_client or get_llm_client()
         answer_text = ""
@@ -136,10 +152,7 @@ class AnswerEngine:
         try:
             response = client.chat.completions.create(
                 model=settings.llm_model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
+                messages=messages,
                 temperature=settings.llm_temperature,
                 max_tokens=settings.llm_max_tokens,
             )
@@ -176,6 +189,11 @@ class AnswerEngine:
                 )
             else:
                 answer_text = "I cannot answer this question based on the provided document context."
+
+        # Append to active history
+        if chat_history is None:
+            self.history.append({"role": "user", "content": question})
+            self.history.append({"role": "assistant", "content": answer_text})
 
         # 3. Parse citations
         citations = parse_citations_from_text(answer_text, chunks)
