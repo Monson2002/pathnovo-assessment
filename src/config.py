@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     text_similarity_threshold: float = 0.4
     spatial_weight: float = 0.3
     confidence_threshold: float = 0.5
+    ocr_dpi: int = 300
 
     # Storage & Telemetry
     trace_output_dir: str = "traces"

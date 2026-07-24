@@ -1,7 +1,7 @@
 [project]
 name = "pathnovo-assessment"
 version = "0.1.0"
-description = "Add your description here"
+description = "Format-agnostic engineering document delta engine and grounded RAG chat system"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -14,10 +14,14 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "openai>=1.0.0",
     "chromadb>=0.4.0",
-    "pytest>=8.0.0",
 ]
 
 [dependency-groups]
 dev = [
     "pre-commit>=4.6.1",
+    "pytest>=8.0.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

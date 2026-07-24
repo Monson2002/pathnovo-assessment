@@ -1,10 +1,6 @@
-from difflib import SequenceMatcher
 from typing import Any, Dict, List
+from src.delta.align import text_similarity
 from src.delta.engine import DeltaItem
-
-
-def text_similarity(a: str, b: str) -> float:
-    return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
 
 
 def delta_precision_recall_f1(
@@ -78,6 +74,20 @@ def groundedness_score(answer: str, retrieved_chunks: List[str]) -> float:
         return 1.0
 
     grounded_count = 0
+    stop_words = {
+        "the",
+        "and",
+        "with",
+        "from",
+        "that",
+        "this",
+        "have",
+        "been",
+        "were",
+        "where",
+        "what",
+    }
+
     for sentence in sentences:
         # Ignore citation tags in sentence when checking grounding
         cleaned = (
@@ -85,7 +95,11 @@ def groundedness_score(answer: str, retrieved_chunks: List[str]) -> float:
             .replace("[PID B", "")
             .replace("[Delta Report", "")
         )
-        words = [w for w in cleaned.lower().split() if len(w) > 3]
+        words = [
+            w.strip(".,!?:;\"'()[]")
+            for w in cleaned.lower().split()
+            if len(w) > 3 and w not in stop_words
+        ]
         if not words:
             grounded_count += 1
             continue

@@ -2,9 +2,12 @@ import re
 from enum import Enum
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
-from src.canonical.model import BoundingBox, CanonicalDocument
+from src.canonical.model import BoundingBox, CanonicalDocument, Page
 from src.config import settings
-from src.delta.align import align_blocks
+from src.delta.align import align_blocks, bbox_iou
+from src.observability.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class ChangeType(str, Enum):
@@ -41,18 +44,26 @@ def classify_item_type(text: str) -> str:
         return "text"
     text_clean = text.strip()
 
-    # Dimension pattern e.g., 2", 100mm, DN50, 3/4"
+    # Dimension pattern e.g., 2", 100mm, DN50, 1'-6", 3/4", 150#, 150 LB, Ø12, NPS 4
     if re.search(
-        r'^\d+(\.\d+)?\s*(mm|cm|m|"|in|DN|ANSI|#)?$', text_clean, re.IGNORECASE
-    ) or re.search(r'^\d+/\d+"$', text_clean):
+        r'^\d+(\.\d+)?\s*(mm|cm|m|"|in|ft|DN|ANSI|LB|#|psi|bar|kPa)?$',
+        text_clean,
+        re.IGNORECASE,
+    ) or re.search(
+        r'^\d+[\'-]\d+"?|\d+/\d+"?|Ø\d+|NPS\s*\d+', text_clean, re.IGNORECASE
+    ):
         return "dimension"
 
-    # Equipment/Tag Label pattern e.g., P-101A, V-202, FT-1001, HV-001
-    if re.search(r"^[A-Z]{1,4}-?\d{2,5}[A-Z]?$", text_clean):
+    # Equipment/Tag/Piping Line Label pattern e.g., P-101A, V-202, FT-1001, HV-001, FIC-1001A, PSV-100A/B, 10"-P-1001-CS
+    if re.search(
+        r"^[A-Z0-9]{1,6}-?[A-Z0-9]{1,6}(-[A-Z0-9]{1,6})*(/[A-Z0-9]+)?$", text_clean
+    ) and any(c.isdigit() for c in text_clean):
         return "label"
 
-    # Note pattern e.g., NOTE: ..., REMARKS:
-    if re.search(r"^(NOTE|REMARK|REF|DWG|DRAWING)\b", text_clean, re.IGNORECASE):
+    # Note pattern e.g., NOTE: ..., REMARKS:, REVISION:
+    if re.search(
+        r"^(NOTE|REMARK|REF|DWG|DRAWING|REVISION)\b", text_clean, re.IGNORECASE
+    ):
         return "note"
 
     return "text"
@@ -91,10 +102,78 @@ class DeltaEngine:
             else settings.confidence_threshold
         )
 
+    def _compare_drawings(
+        self, page_num: int, page_a: Page, page_b: Page
+    ) -> List[DeltaItem]:
+        """Compare significant vector drawing elements between revision A and B for a page."""
+        items: List[DeltaItem] = []
+        # Filter for significant geometric elements (avoid micro-line segments)
+        drawings_a = [
+            d
+            for d in page_a.drawing_elements
+            if d.bbox.width >= 0.02 or d.bbox.height >= 0.02
+        ]
+        drawings_b = [
+            d
+            for d in page_b.drawing_elements
+            if d.bbox.width >= 0.02 or d.bbox.height >= 0.02
+        ]
+
+        if not drawings_a and not drawings_b:
+            return items
+
+        used_b = set()
+        for idx_a, elem_a in enumerate(drawings_a):
+            best_match = None
+            best_iou = 0.0
+            for idx_b, elem_b in enumerate(drawings_b):
+                if idx_b in used_b:
+                    continue
+                iou = bbox_iou(elem_a.bbox, elem_b.bbox)
+                if iou > best_iou:
+                    best_iou = iou
+                    best_match = idx_b
+
+            if best_match is not None and best_iou >= 0.6:
+                used_b.add(best_match)
+            else:
+                items.append(
+                    DeltaItem(
+                        change_type=ChangeType.REMOVED,
+                        item_type="geometry",
+                        page=page_num,
+                        location=elem_a.bbox,
+                        description=f"Removed {elem_a.element_type} geometric shape on page {page_num}",
+                        old_value=elem_a.element_type,
+                        new_value=None,
+                        confidence=0.80,
+                    )
+                )
+
+        for idx_b, elem_b in enumerate(drawings_b):
+            if idx_b not in used_b:
+                items.append(
+                    DeltaItem(
+                        change_type=ChangeType.ADDED,
+                        item_type="geometry",
+                        page=page_num,
+                        location=elem_b.bbox,
+                        description=f"Added {elem_b.element_type} geometric shape on page {page_num}",
+                        old_value=None,
+                        new_value=elem_b.element_type,
+                        confidence=0.80,
+                    )
+                )
+
+        return items
+
     def compute_delta(
         self, doc_a: CanonicalDocument, doc_b: CanonicalDocument
     ) -> DeltaResult:
         """Compute structured changes between canonical document A and B."""
+        logger.info(
+            f"Computing delta between PID A ({doc_a.metadata.pid}) and PID B ({doc_b.metadata.pid})"
+        )
         items: List[DeltaItem] = []
         max_pages = max(len(doc_a.pages), len(doc_b.pages))
 
@@ -137,8 +216,10 @@ class DeltaEngine:
                     )
                 continue
 
-            assert page_a is not None and page_b is not None
+            if not page_a or not page_b:
+                continue
 
+            # 1. Compare text blocks
             matched, unmatched_a, unmatched_b = align_blocks(
                 page_a.text_blocks,
                 page_b.text_blocks,
@@ -201,6 +282,10 @@ class DeltaEngine:
                     )
                 )
 
+            # 2. Compare drawing elements (geometry)
+            drawing_deltas = self._compare_drawings(page_num, page_a, page_b)
+            items.extend(drawing_deltas)
+
         # Filter items below confidence threshold if configured
         filtered_items = [
             item for item in items if item.confidence >= self.confidence_threshold
@@ -218,6 +303,11 @@ class DeltaEngine:
             ),
             "total_changes": len(filtered_items),
         }
+
+        logger.info(
+            f"Delta computation complete: {summary['total_changes']} changes detected "
+            f"({summary['added']} added, {summary['removed']} removed, {summary['modified']} modified)"
+        )
 
         return DeltaResult(
             pid_a=doc_a.metadata.pid,

@@ -3,6 +3,9 @@ from difflib import SequenceMatcher
 from typing import List, Tuple
 from src.canonical.model import BoundingBox, TextBlock
 
+MIN_TEXT_SIMILARITY: float = 0.25
+HIGH_IOU_THRESHOLD: float = 0.5
+
 
 def bbox_iou(a: BoundingBox, b: BoundingBox) -> float:
     """Intersection over Union of two bounding boxes in normalized coordinates."""
@@ -77,7 +80,8 @@ def align_blocks(
             # Require minimum text similarity or exact spatial overlap to consider matching
             t_sim = text_similarity(block_a.content, block_b.content)
             if score >= text_threshold and (
-                t_sim >= 0.25 or bbox_iou(block_a.bbox, block_b.bbox) > 0.5
+                t_sim >= MIN_TEXT_SIMILARITY
+                or bbox_iou(block_a.bbox, block_b.bbox) > HIGH_IOU_THRESHOLD
             ):
                 candidates.append((score, idx_a, idx_b))
 

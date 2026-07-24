@@ -5,11 +5,27 @@
   "expected_deltas": [
     {
       "change_type": "modified",
-      "item_type": "text",
+      "item_type": "label",
       "page": 1,
       "description": "Title changed from 'Export Gas Compressor' to 'Lift Gas Compressor'",
       "old_value": "EXPORT GAS COMPRESSOR",
       "new_value": "LIFT GAS COMPRESSOR"
+    },
+    {
+      "change_type": "modified",
+      "item_type": "label",
+      "page": 1,
+      "description": "System tag modified from EXPORT GAS to LIFT GAS",
+      "old_value": "EXPORT GAS",
+      "new_value": "LIFT GAS"
+    },
+    {
+      "change_type": "modified",
+      "item_type": "text",
+      "page": 1,
+      "description": "Header text modification",
+      "old_value": "EXPORT",
+      "new_value": "LIFT"
     }
   ],
   "qa_pairs": [
@@ -22,6 +38,11 @@
       "question": "What is the main difference between the two document titles?",
       "expected_answer_contains": ["Lift Gas Compressor", "Export Gas Compressor"],
       "expected_sources": ["delta_report", "pid_a", "pid_b"]
+    },
+    {
+      "question": "What was the system tag changed from and to?",
+      "expected_answer_contains": ["EXPORT", "LIFT"],
+      "expected_sources": ["delta_report"]
     }
   ]
 }

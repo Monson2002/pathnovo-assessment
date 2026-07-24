@@ -22,10 +22,6 @@ from src.delta import (
 def test_bbox_iou_calculation():
     box1 = BoundingBox(x0=0.0, y0=0.0, x1=0.5, y1=0.5)
     box2 = BoundingBox(x0=0.25, y0=0.25, x1=0.75, y1=0.75)
-    # Intersection = 0.25 * 0.25 = 0.0625
-    # Area box1 = 0.25, Area box2 = 0.25
-    # Union = 0.25 + 0.25 - 0.0625 = 0.4375
-    # IoU = 0.0625 / 0.4375 = 1 / 7 ~= 0.142857
     assert bbox_iou(box1, box2) == pytest.approx(1.0 / 7.0)
 
     # Non-overlapping boxes
@@ -88,6 +84,10 @@ def test_delta_engine_computation():
                         content="Old Valve HV-001",
                         bbox=BoundingBox(x0=0.4, y0=0.4, x1=0.6, y1=0.5),
                     ),
+                    TextBlock(
+                        content="Deprecated Note",
+                        bbox=BoundingBox(x0=0.8, y0=0.8, x1=0.95, y1=0.9),
+                    ),
                 ],
             )
         ],
@@ -128,8 +128,8 @@ def test_delta_engine_computation():
     assert result.pid_b == "PID_B"
     assert result.summary["modified"] == 1
     assert result.summary["added"] == 1
-    assert result.summary["removed"] == 0
-    assert result.summary["total_changes"] == 2
+    assert result.summary["removed"] == 1
+    assert result.summary["total_changes"] == 3
 
 
 def test_report_generation():

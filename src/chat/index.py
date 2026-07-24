@@ -1,10 +1,14 @@
 import json
 import os
+import re
 from typing import Any, Dict, List, Optional
 import chromadb
 from src.canonical.model import CanonicalDocument
 from src.chat.llm import get_embedding
 from src.config import settings
+from src.observability.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class DocumentIndex:
@@ -42,6 +46,9 @@ class DocumentIndex:
         delta_report_md: str,
     ) -> int:
         """Index text blocks from PID A, PID B, and delta report markdown entries."""
+        logger.info(
+            "Building ChromaDB vector index over PID A, PID B, and Delta Report"
+        )
         documents: List[str] = []
         embeddings: List[List[float]] = []
         metadatas: List[Dict[str, Any]] = []
@@ -103,6 +110,12 @@ class DocumentIndex:
                 if current_chunk:
                     text_chunk = "\n".join(current_chunk).strip()
                     if text_chunk:
+                        # Extract page number if present in item description (e.g., "on page 2")
+                        page_match = re.search(
+                            r"on page (\d+)", text_chunk, re.IGNORECASE
+                        )
+                        chunk_page = int(page_match.group(1)) if page_match else 1
+
                         vec = get_embedding(text_chunk)
                         doc_id = f"delta_report_c{chunk_idx}"
                         documents.append(text_chunk)
@@ -111,9 +124,9 @@ class DocumentIndex:
                             {
                                 "source": "delta_report",
                                 "pid": f"{doc_a.metadata.pid}_vs_{doc_b.metadata.pid}",
-                                "page": 1,
+                                "page": chunk_page,
                                 "content": text_chunk,
-                                "bbox": "",
+                                "bbox": "none",
                             }
                         )
                         ids.append(doc_id)
@@ -125,6 +138,9 @@ class DocumentIndex:
         if current_chunk:
             text_chunk = "\n".join(current_chunk).strip()
             if text_chunk:
+                page_match = re.search(r"on page (\d+)", text_chunk, re.IGNORECASE)
+                chunk_page = int(page_match.group(1)) if page_match else 1
+
                 vec = get_embedding(text_chunk)
                 doc_id = f"delta_report_c{chunk_idx}"
                 documents.append(text_chunk)
@@ -133,9 +149,9 @@ class DocumentIndex:
                     {
                         "source": "delta_report",
                         "pid": f"{doc_a.metadata.pid}_vs_{doc_b.metadata.pid}",
-                        "page": 1,
+                        "page": chunk_page,
                         "content": text_chunk,
-                        "bbox": "",
+                        "bbox": "none",
                     }
                 )
                 ids.append(doc_id)
@@ -149,6 +165,7 @@ class DocumentIndex:
                 ids=ids,
             )
 
+        logger.info(f"Vector index built successfully with {count} chunks")
         return count
 
     def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:

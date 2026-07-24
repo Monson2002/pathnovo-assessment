@@ -1,6 +1,10 @@
+import hashlib
 from typing import List, Optional
 from openai import OpenAI
 from src.config import settings
+from src.observability.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_llm_client(api_key: Optional[str] = None) -> OpenAI:
@@ -17,8 +21,10 @@ def get_embedding_client(api_key: Optional[str] = None) -> OpenAI:
     return get_llm_client(api_key=api_key)
 
 
-def get_embedding(text: str, client: Optional[OpenAI] = None) -> List[float]:
-    """Get vector embedding for text using NVIDIA embedding model."""
+def get_embedding(
+    text: str, client: Optional[OpenAI] = None, dim: int = 1024
+) -> List[float]:
+    """Get vector embedding for text using NVIDIA embedding model or deterministic fallback."""
     if not client:
         client = get_embedding_client()
 
@@ -28,11 +34,13 @@ def get_embedding(text: str, client: Optional[OpenAI] = None) -> List[float]:
             model=settings.embedding_model,
         )
         return response.data[0].embedding
-    except Exception:
-        # Fallback deterministic pseudo-embedding (128 dimensions) for offline/testing mode without valid API key
-        import hashlib
-
+    except Exception as e:
+        logger.debug(
+            f"API embedding failed, using deterministic fallback ({dim}-dim): {e}"
+        )
+        # Fallback deterministic pseudo-embedding (matching embedding dimensionality)
         h = hashlib.sha256(text.encode("utf-8")).digest()
         float_vec = [(b / 255.0) * 2.0 - 1.0 for b in h]
-        # Repeat to match 128 dims
-        return (float_vec * 4)[:128]
+        # Repeat to match target dimensions (default 1024)
+        repeats = (dim // len(float_vec)) + 1
+        return (float_vec * repeats)[:dim]

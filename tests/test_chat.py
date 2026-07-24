@@ -1,3 +1,4 @@
+from unittest.mock import MagicMock
 from src.canonical.model import (
     BoundingBox,
     CanonicalDocument,
@@ -8,6 +9,7 @@ from src.canonical.model import (
 from src.chat import (
     AnswerEngine,
     AnswerResult,
+    Citation,
     DocumentIndex,
     get_embedding,
 )
@@ -74,11 +76,61 @@ def test_document_index_and_search():
 
 
 def test_answer_engine_grounded_response():
-    index = DocumentIndex(persist_dir=None)
-    engine = AnswerEngine(index=index)
+    doc_a = CanonicalDocument(
+        metadata=DocumentMetadata(
+            pid="PID_A", filename="pid_a.pdf", format="native_pdf", page_count=1
+        ),
+        pages=[
+            Page(
+                page_number=1,
+                width=100.0,
+                height=100.0,
+                text_blocks=[
+                    TextBlock(
+                        content="Export Gas Compressor Title",
+                        bbox=BoundingBox(x0=0.1, y0=0.1, x1=0.3, y1=0.2),
+                    ),
+                ],
+            )
+        ],
+    )
+    doc_b = CanonicalDocument(
+        metadata=DocumentMetadata(
+            pid="PID_B", filename="pid_b.pdf", format="native_pdf", page_count=1
+        ),
+        pages=[
+            Page(
+                page_number=1,
+                width=100.0,
+                height=100.0,
+                text_blocks=[
+                    TextBlock(
+                        content="Lift Gas Compressor Title",
+                        bbox=BoundingBox(x0=0.1, y0=0.1, x1=0.3, y1=0.2),
+                    ),
+                ],
+            )
+        ],
+    )
 
+    index = DocumentIndex(persist_dir=None)
+    index.build_index(doc_a, doc_b, "# Delta Report")
+
+    # Mock LLM Client to return grounded answer with citation
+    mock_client = MagicMock()
+    mock_choice = MagicMock()
+    mock_choice.message.content = (
+        "The title of PID A is Export Gas Compressor. [PID A, Page 1]"
+    )
+    mock_client.chat.completions.create.return_value.choices = [mock_choice]
+
+    engine = AnswerEngine(index=index, llm_client=mock_client)
     res = engine.answer_question("What is the title of PID A?")
+
     assert isinstance(res, AnswerResult)
     assert res.question == "What is the title of PID A?"
-    assert res.answer != ""
-    assert isinstance(res.citations, list)
+    assert "Export Gas Compressor" in res.answer
+    assert len(res.citations) > 0
+    assert isinstance(res.citations[0], Citation)
+    assert res.citations[0].source == "pid_a"
+    assert res.citations[0].page == 1
