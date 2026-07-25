@@ -38,7 +38,7 @@ Use the most appropriate type:
 ## Commit Message Rules
 
 - Subject in imperative mood.
-- Maximum 72 characters.
+- Maximum 200 characters.
 - No trailing period.
 - Lowercase type.
 - Format:

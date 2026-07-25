@@ -1,6 +1,5 @@
-def main():
-    print("Hello from pathnovo-assessment!")
-
+import sys
+from src.main import main
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
