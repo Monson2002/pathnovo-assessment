@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     embedding_model: str = "nvidia/llama-nemotron-embed-1b-v2"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 2048
+    # Nemotron Super 49B pricing (NVIDIA NIM hosted, USD per 1M tokens)
+    llm_cost_per_1m_input: float = 0.60
+    llm_cost_per_1m_output: float = 1.80
 
     # Delta Engine Parameters
     text_similarity_threshold: float = 0.4
@@ -29,6 +32,13 @@ class Settings(BaseSettings):
     chroma_database: str = "default_database"
     chroma_host: Optional[str] = None
     chroma_port: int = 8000
+
+    # REST API Settings
+    api_auth_token: Optional[str] = (
+        None  # if set, required as `Authorization: Bearer <token>`
+    )
+    api_cors_origins: str = "*"  # comma-separated list of allowed origins, or "*"
+    api_session_ttl_seconds: int = 3600
 
     model_config = SettingsConfigDict(
         env_file=".env",

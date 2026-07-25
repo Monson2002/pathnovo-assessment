@@ -130,10 +130,6 @@ def main() -> int:
             if markup_path:
                 print(f"  Saved Visual Redline Markup to: {markup_path}")
 
-        trace_path = tracer.finish(output_dir=os.path.join(args.output_dir, "traces"))
-        logger.info(f"Observability trace written to {trace_path}")
-        print(f"  Saved Observability Trace: {trace_path}\n")
-
         if args.chat:
             with tracer.span("chat_session"):
                 logger.info("Stage 4: Launching Grounded Chat")
@@ -177,6 +173,10 @@ def main() -> int:
                     except (KeyboardInterrupt, EOFError):
                         print("\nExiting chat mode. Goodbye!")
                         break
+
+        trace_path = tracer.finish(output_dir=os.path.join(args.output_dir, "traces"))
+        logger.info(f"Observability trace written to {trace_path}")
+        print(f"  Saved Observability Trace: {trace_path}\n")
 
         return 0
 

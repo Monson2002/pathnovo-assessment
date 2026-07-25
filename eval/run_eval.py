@@ -47,14 +47,20 @@ def run_evaluation(
     delta_cache_dir = os.path.join(output_dir, ".cache", "delta")
     chroma_eval_dir = os.path.join(output_dir, ".chroma_eval")
 
+    stage_latency_ms: Dict[str, float] = {}
+
     print("1. Ingesting documents...")
+    t0 = time.perf_counter()
     doc_a = detect_and_ingest(pdf_a_path, pid="PID_A", cache_dir=eval_cache_dir)
     doc_b = detect_and_ingest(pdf_b_path, pid="PID_B", cache_dir=eval_cache_dir)
+    stage_latency_ms["ingest_documents"] = round((time.perf_counter() - t0) * 1000, 2)
 
     print("2. Computing deltas...")
+    t0 = time.perf_counter()
     engine = DeltaEngine()
     delta_res = engine.compute_delta(doc_a, doc_b, cache_dir=delta_cache_dir)
     md_report = generate_markdown_report(delta_res)
+    stage_latency_ms["compute_delta"] = round((time.perf_counter() - t0) * 1000, 2)
 
     print("3. Evaluating Delta Engine...")
     delta_metrics = delta_precision_recall_f1(
@@ -62,6 +68,7 @@ def run_evaluation(
     )
 
     print("4. Indexing for Grounded Chat...")
+    t0 = time.perf_counter()
     index = DocumentIndex(persist_dir=chroma_eval_dir)
 
     # Fast mode uses local deterministic vectors for instant offline harness runs
@@ -110,6 +117,7 @@ def run_evaluation(
                         "citations": [c.model_dump() for c in res.citations],
                     }
                 )
+        stage_latency_ms["index_and_chat"] = round((time.perf_counter() - t0) * 1000, 2)
     else:
         # Live inference mode using real NVIDIA LLM & Embedding calls
         index.build_index(doc_a, doc_b, md_report)
@@ -136,6 +144,7 @@ def run_evaluation(
                     "citations": [c.model_dump() for c in res.citations],
                 }
             )
+        stage_latency_ms["index_and_chat"] = round((time.perf_counter() - t0) * 1000, 2)
 
     avg_groundedness = (
         sum(groundedness_scores) / len(groundedness_scores)
@@ -145,6 +154,28 @@ def run_evaluation(
     avg_citation = (
         sum(citation_scores) / len(citation_scores) if citation_scores else 1.0
     )
+
+    # Derive at least one real failure case from this run's own results, instead of
+    # a static boilerplate list that never changes across runs/datasets.
+    worst_qa = (
+        min(qa_results, key=lambda r: (r["groundedness"], r["citation_accuracy"]))
+        if qa_results
+        else None
+    )
+    failure_case = {
+        "delta_false_positive_example": delta_metrics.get("false_positive_example"),
+        "delta_false_negative_example": delta_metrics.get("false_negative_example"),
+        "worst_chat_answer": (
+            {
+                "question": worst_qa["question"],
+                "groundedness": worst_qa["groundedness"],
+                "citation_accuracy": worst_qa["citation_accuracy"],
+                "answer_snippet": worst_qa["answer"][:200],
+            }
+            if worst_qa
+            else None
+        ),
+    }
 
     results = {
         "timestamp": time.time(),
@@ -157,12 +188,9 @@ def run_evaluation(
             "groundedness": round(avg_groundedness, 2),
             "citation_accuracy": round(avg_citation, 2),
         },
+        "stage_latency_ms": stage_latency_ms,
         "qa_details": qa_results,
-        "known_limitations": [
-            "OCR confidence variations on scanned title blocks",
-            "Geometric vector path overlap heuristic thresholds",
-            "Multi-line label bounding box fragmentation",
-        ],
+        "failure_case": failure_case,
     }
 
     # Save JSON scorecard output
@@ -188,10 +216,22 @@ def run_evaluation(
     print(f"║   Groundedness:         {avg_groundedness:<25.2f}║")
     print(f"║   Citation Accuracy:    {avg_citation:<25.2f}║")
     print("║                                                  ║")
-    print("║ Known Limitations                                ║")
-    print("║   - OCR confidence on scanned title blocks       ║")
-    print("║   - Vector graphics bounding overlap heuristic   ║")
-    print("║   - Bounding box fragmentation on long text      ║")
+    print("║ Stage Latency (ms)                               ║")
+    for stage_name, ms in stage_latency_ms.items():
+        print(f"║   {stage_name:<22} {ms:<25.1f}║")
+    print("║                                                  ║")
+    print("║ Failure Case (this run)                          ║")
+    if failure_case["delta_false_positive_example"]:
+        print(f"║   FP: {str(failure_case['delta_false_positive_example'])[:42]:<42}║")
+    if failure_case["delta_false_negative_example"]:
+        print(f"║   FN: {str(failure_case['delta_false_negative_example'])[:42]:<42}║")
+    if worst_qa:
+        print(f"║   Worst Q: {worst_qa['question'][:38]:<38}║")
+        print(
+            f"║     groundedness={worst_qa['groundedness']:.2f} citation_accuracy={worst_qa['citation_accuracy']:.2f}"
+            + " " * 8
+            + "║"
+        )
     print(f"║ Saved to: {out_file:<39}║")
     print("╚══════════════════════════════════════════════════╝")
     print("\n")

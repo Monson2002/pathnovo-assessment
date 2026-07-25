@@ -47,6 +47,14 @@ def parse_citations_from_text(
 ) -> List[Citation]:
     """Parse citation markers like [PID A, Page 1] or [Delta Report, Item #2] from answer text."""
     citations = []
+    seen = set()
+
+    def _add(citation: Citation) -> None:
+        key = (citation.source, citation.page, citation.item_number)
+        if key in seen:
+            return
+        seen.add(key)
+        citations.append(citation)
 
     # Matches [PID A, Page 1], [PID B, page 2], [PID A, Page 10] (case-insensitive)
     pid_matches = re.findall(
@@ -54,7 +62,7 @@ def parse_citations_from_text(
     )
     for doc_name, page_str in pid_matches:
         source_key = "pid_a" if "A" in doc_name.upper() else "pid_b"
-        citations.append(
+        _add(
             Citation(
                 source=source_key,
                 page=int(page_str),
@@ -66,7 +74,7 @@ def parse_citations_from_text(
         r"\[Delta Report, Item #?(\d+)\]", answer_text, re.IGNORECASE
     )
     for item_num_str in item_matches:
-        citations.append(
+        _add(
             Citation(
                 source="delta_report",
                 item_number=int(item_num_str),
@@ -85,7 +93,7 @@ def parse_citations_from_text(
                 if src == "pid_a"
                 else ("PID B" if src == "pid_b" else "Delta Report")
             )
-            citations.append(
+            _add(
                 Citation(
                     source=src,
                     page=pg,
@@ -163,12 +171,17 @@ class AnswerEngine:
             if tracer and hasattr(response, "usage") and response.usage:
                 prompt_tokens = response.usage.prompt_tokens or 0
                 completion_tokens = response.usage.completion_tokens or 0
+                estimated_cost = (
+                    prompt_tokens / 1_000_000 * settings.llm_cost_per_1m_input
+                    + completion_tokens / 1_000_000 * settings.llm_cost_per_1m_output
+                )
                 tracer.log_llm_call(
                     model=settings.llm_model,
                     prompt=user_prompt,
                     response=answer_text,
                     tokens_in=prompt_tokens,
                     tokens_out=completion_tokens,
+                    estimated_cost=estimated_cost,
                 )
 
         except Exception as e:

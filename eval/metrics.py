@@ -8,15 +8,30 @@ def delta_precision_recall_f1(
 ) -> Dict[str, float]:
     """Compute Precision, Recall, and F1 score for detected deltas vs ground truth."""
     if not expected:
-        return {"precision": 1.0 if not predicted else 0.0, "recall": 1.0, "f1": 1.0}
+        return {
+            "precision": 1.0 if not predicted else 0.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "false_positive_example": None,
+            "false_negative_example": None,
+        }
 
     if not predicted:
-        return {"precision": 0.0, "recall": 0.0, "f1": 0.0}
+        return {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "false_positive_example": None,
+            "false_negative_example": expected[0].get("description")
+            if expected
+            else None,
+        }
 
     tp = 0
     matched_expected = set()
+    matched_predicted_idx = set()
 
-    for item in predicted:
+    for pred_idx, item in enumerate(predicted):
         for idx, exp in enumerate(expected):
             if idx in matched_expected:
                 continue
@@ -38,6 +53,7 @@ def delta_precision_recall_f1(
             ):
                 tp += 1
                 matched_expected.add(idx)
+                matched_predicted_idx.add(pred_idx)
                 break
 
     fp = len(predicted) - tp
@@ -51,10 +67,30 @@ def delta_precision_recall_f1(
         else 0.0
     )
 
+    # A concrete, per-run failure example instead of a static boilerplate list.
+    fp_example = next(
+        (
+            item.description
+            for pred_idx, item in enumerate(predicted)
+            if pred_idx not in matched_predicted_idx
+        ),
+        None,
+    )
+    fn_example = next(
+        (
+            exp.get("description")
+            for idx, exp in enumerate(expected)
+            if idx not in matched_expected
+        ),
+        None,
+    )
+
     return {
         "precision": round(precision, 2),
         "recall": round(recall, 2),
         "f1": round(f1, 2),
+        "false_positive_example": fp_example,
+        "false_negative_example": fn_example,
     }
 
 

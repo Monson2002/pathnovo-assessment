@@ -2,9 +2,11 @@ import os
 import pytest
 from src.canonical.model import BoundingBox, CanonicalDocument
 from src.ingest import DWGAdapter, NativePDFAdapter, detect_and_ingest
+from src.ingest.pdf_scanned import ScannedPDFAdapter
 
 SAMPLE_PDF_1 = "data/samples/pair_01/Export Gas Compressor-P&ID (1).pdf"
 SAMPLE_PDF_2 = "data/samples/pair_01/Lift Gas compressor-P&ID.pdf"
+SAMPLE_SCANNED_PDF = "data/samples/scanned/pid_a_scanned.pdf"
 
 
 def test_bounding_box_properties():
@@ -33,6 +35,29 @@ def test_native_pdf_adapter():
     first_block = first_page.text_blocks[0]
     assert first_block.content != ""
     assert 0.0 <= first_block.bbox.x0 <= 1.0
+
+
+def test_scanned_pdf_adapter_dispatch_and_ocr():
+    """Verify an image-only (no text layer) PDF is routed to ScannedPDFAdapter
+    (not NativePDFAdapter) and that OCR extracts readable text blocks."""
+    if not os.path.exists(SAMPLE_SCANNED_PDF):
+        pytest.skip("Scanned sample PDF not found")
+
+    native_adapter = NativePDFAdapter()
+    assert native_adapter.can_handle(SAMPLE_SCANNED_PDF) is False
+
+    scanned_adapter = ScannedPDFAdapter()
+    assert scanned_adapter.can_handle(SAMPLE_SCANNED_PDF) is True
+
+    doc = detect_and_ingest(SAMPLE_SCANNED_PDF, pid="PID_SCANNED", use_cache=False)
+    assert doc.metadata.format == "scanned_pdf"
+    assert doc.metadata.page_count > 0
+    assert len(doc.pages) > 0
+
+    first_page = doc.pages[0]
+    assert len(first_page.text_blocks) > 0
+    assert any(block.content.strip() for block in first_page.text_blocks)
+    assert 0.0 <= first_page.text_blocks[0].bbox.x0 <= 1.0
 
 
 def test_dwg_adapter_stub():
