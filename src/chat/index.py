@@ -4,7 +4,7 @@ import re
 from typing import Any, Dict, List, Optional
 import chromadb
 from src.canonical.model import CanonicalDocument
-from src.chat.llm import get_embedding
+from src.chat.llm import get_embedding, get_embeddings_batch
 from src.config import settings
 from src.observability.logging import get_logger
 
@@ -188,17 +188,14 @@ class DocumentIndex:
             )
             return len(items_to_process)
 
-        documents: List[str] = []
-        embeddings: List[List[float]] = []
-        metadatas: List[Dict[str, Any]] = []
-        ids: List[str] = []
+        documents: List[str] = [content for _, content, _ in new_items]
+        metadatas: List[Dict[str, Any]] = [meta for _, _, meta in new_items]
+        ids: List[str] = [doc_id for doc_id, _, _ in new_items]
 
-        for doc_id, content, meta in new_items:
-            vec = get_embedding(content)
-            documents.append(content)
-            embeddings.append(vec)
-            metadatas.append(meta)
-            ids.append(doc_id)
+        # Batched (not one-call-per-chunk) so indexing a large delta report
+        # (hundreds of chunks) doesn't turn into hundreds of sequential
+        # network round-trips.
+        embeddings: List[List[float]] = get_embeddings_batch(documents)
 
         # Batch upsert in blocks of BATCH_SIZE (200) to prevent Chroma Cloud NUM_RECORDS payload error
         if documents:

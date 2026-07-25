@@ -1,0 +1,80 @@
+{
+  "pair_id": "pair_02",
+  "pid_a": "data/samples/pair_02/pid_a_rev0.pdf",
+  "pid_b": "data/samples/pair_02/pid_b_rev1.pdf",
+  "dataset_notes": [
+    "pair_02 is a TRUE synthetic revision pair: pid_b is generated from pid_a by applying the exact text edits below via PyMuPDF (scripts/synthesize_pair_02.py). Because the edits are made programmatically, this ground truth is exact, not estimated -- complementing pair_01, whose two PDFs are genuinely different documents (see pair_01_expected.json's dataset_notes) and therefore can only support a hand-verified sample ground truth."
+  ],
+  "expected_deltas": [
+    {
+      "change_type": "modified",
+      "item_type": "note",
+      "page": 1,
+      "description": "Interlock instrument tag renumbered from 26-PDI-9015 to 26-PDI-9099",
+      "old_value": "26-PDI-9015 HH INITIATE PRESSURIZED COMPRESSOR STOP.",
+      "new_value": "26-PDI-9099 HH INITIATE PRESSURIZED COMPRESSOR STOP."
+    },
+    {
+      "change_type": "modified",
+      "item_type": "note",
+      "page": 1,
+      "description": "Oil mist separator mounting changed from OFF-SKID to ON-SKID (also fixes SEPERATOR typo)",
+      "old_value": "LUBE OIL RESERVOIR VENT. OIL MIST SEPERATOR INSTALLED OFF-SKID.",
+      "new_value": "LUBE OIL RESERVOIR VENT. OIL MIST SEPARATOR INSTALLED ON-SKID."
+    },
+    {
+      "change_type": "modified",
+      "item_type": "dimension",
+      "page": 1,
+      "description": "Heat tracing setpoint raised from 25\u00b0C to 40\u00b0C",
+      "old_value": "SAFETY CRITICAL HEAT TRACING - HYDRATE MITIGATION (25\u00b0C).",
+      "new_value": "SAFETY CRITICAL HEAT TRACING - HYDRATE MITIGATION (40\u00b0C)."
+    },
+    {
+      "change_type": "modified",
+      "item_type": "label",
+      "page": 1,
+      "description": "Pressure control valve tag renumbered from 26-PY-9087B to 26-PY-9187B",
+      "old_value": "26-PY-9087B",
+      "new_value": "26-PY-9187B"
+    },
+    {
+      "change_type": "modified",
+      "item_type": "label",
+      "page": 1,
+      "description": "Anti-surge valve tag renumbered from 26-FV-9038 to 26-FV-9138",
+      "old_value": "26-FV-9038",
+      "new_value": "26-FV-9138"
+    },
+    {
+      "change_type": "removed",
+      "item_type": "label",
+      "page": 1,
+      "description": "Atmospheric vent label removed",
+      "old_value": "ATMOSPHERIC VENT.",
+      "new_value": null
+    }
+  ],
+  "qa_pairs": [
+    {
+      "question": "What was the interlock instrument tag changed from and to?",
+      "expected_answer_contains": [
+        "26-PDI-9015",
+        "26-PDI-9099"
+      ],
+      "expected_sources": [
+        "delta_report"
+      ]
+    },
+    {
+      "question": "What changed about the heat tracing setpoint?",
+      "expected_answer_contains": [
+        "25",
+        "40"
+      ],
+      "expected_sources": [
+        "delta_report"
+      ]
+    }
+  ]
+}

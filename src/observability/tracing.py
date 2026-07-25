@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from src.config import settings
+from src.observability.logging import set_correlation_id
 
 
 @dataclass
@@ -87,6 +88,8 @@ class Tracer:
         self.trace = Trace()
         self.trace.root_span = Span(name=trace_name)
         self._span_stack = [self.trace.root_span]
+        # Correlate every structured log emitted during this trace with its trace_id.
+        set_correlation_id(self.trace.trace_id)
 
     @contextmanager
     def span(self, name: str, **metadata):

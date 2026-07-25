@@ -167,8 +167,8 @@ class AnswerEngine:
                     model=settings.llm_model,
                     prompt=user_prompt,
                     response=answer_text,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
+                    tokens_in=prompt_tokens,
+                    tokens_out=completion_tokens,
                 )
 
         except Exception as e:

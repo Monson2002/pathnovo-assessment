@@ -2,46 +2,108 @@
   "pair_id": "pair_01",
   "pid_a": "data/samples/pair_01/Export Gas Compressor-P&ID (1).pdf",
   "pid_b": "data/samples/pair_01/Lift Gas compressor-P&ID.pdf",
+  "dataset_notes": [
+    "IMPORTANT: pair_01's two PDFs are NOT sequential revisions of a single drawing. They are two distinct (but structurally similar) P&ID sheets: 'Export Gas Compressor' vs 'Lift Gas Compressor'. This was discovered during review and is documented candidly here rather than hidden.",
+    "Because of that, the true structural delta between the two documents is large (hundreds of distinct tag/number differences, e.g. 26-PIT-9087 vs 26-PIT-9077, 26-000001-001 vs 26-000006-001) rather than a handful of localized edits a real revision pair would show.",
+    "This ground truth is a hand-verified SAMPLE of real, checkable differences extracted directly from `pdftotext -layout` output of both PDFs (see IMPLEMENTATION_PLAN.md and REVIEW.md for provenance), not an exhaustive labeling of every difference. It is intended to validate that the delta engine correctly detects and classifies real, known changes -- precision/recall against this sample will still read low relative to the ~900+ raw items the engine reports, because the engine is (correctly) also detecting the hundreds of un-labeled real differences between two genuinely different documents.",
+    "For a defensible 'sensible on their own eval set' delta-quality story, the honest framing is: the alignment/classification logic works on verified real changes (see items below), but pair_01 is the wrong sample to prove 'revision delta' behavior -- a synthesized true revision pair (edit one PDF, re-export) would be a stronger eval fixture. See REVIEW.md section 5, item 5."
+  ],
   "expected_deltas": [
     {
       "change_type": "modified",
       "item_type": "label",
       "page": 1,
-      "description": "Title changed from 'Export Gas Compressor' to 'Lift Gas Compressor'",
-      "old_value": "EXPORT GAS COMPRESSOR",
-      "new_value": "LIFT GAS COMPRESSOR"
+      "description": "Compressor service label changed from EXPORT COMPRESSOR to LIFT COMPRESSOR in the inlet/discharge header callouts",
+      "old_value": "HP GAS EXPORT COMPRESSOR INLET HEADER",
+      "new_value": "HP GAS LIFT COMPRESSOR DISCHARGE"
     },
     {
       "change_type": "modified",
       "item_type": "label",
       "page": 1,
-      "description": "System tag modified from EXPORT GAS to LIFT GAS",
-      "old_value": "EXPORT GAS",
-      "new_value": "LIFT GAS"
+      "description": "Equipment/line number tag changed from 26-000001-001 to 26-000006-001",
+      "old_value": "26-000001-001",
+      "new_value": "26-000006-001"
     },
     {
       "change_type": "modified",
-      "item_type": "text",
+      "item_type": "label",
       "page": 1,
-      "description": "Header text modification",
-      "old_value": "EXPORT",
-      "new_value": "LIFT"
+      "description": "Pressure transmitter tag changed from 26-PIT-9087 to 26-PIT-9077",
+      "old_value": "26-PIT-9087",
+      "new_value": "26-PIT-9077"
+    },
+    {
+      "change_type": "modified",
+      "item_type": "label",
+      "page": 1,
+      "description": "PSV control valve tag changed from 26-PY-9087B to 26-PY-9077B",
+      "old_value": "26-PY-9087B",
+      "new_value": "26-PY-9077B"
+    },
+    {
+      "change_type": "modified",
+      "item_type": "dimension",
+      "page": 1,
+      "description": "Setpoint on 26-PY-9087B/26-PY-9077B changed from SP 108.5 to SP 229",
+      "old_value": "SP 108.5",
+      "new_value": "SP 229"
+    },
+    {
+      "change_type": "modified",
+      "item_type": "dimension",
+      "page": 1,
+      "description": "Relief valve setpoint changed from SP= 225.4 bar (g) to SP = 257 bar (g)",
+      "old_value": "SP= 225.4 bar (g)",
+      "new_value": "SP = 257 bar (g)"
+    },
+    {
+      "change_type": "modified",
+      "item_type": "label",
+      "page": 1,
+      "description": "Relief valve tag pair changed from 9027A/9027B to 9066A/9066B",
+      "old_value": "9027A / 9027B",
+      "new_value": "9066A / 9066B"
+    },
+    {
+      "change_type": "modified",
+      "item_type": "label",
+      "page": 1,
+      "description": "Anti-surge valve tag and description changed from 'COMPRESSOR ANTI-SURGE 26-FV-9038' to 'VALVE, 26-FV-9076'",
+      "old_value": "COMPRESSOR ANTI-SURGE 26-FV-9038",
+      "new_value": "VALVE, 26-FV-9076"
+    },
+    {
+      "change_type": "modified",
+      "item_type": "note",
+      "page": 1,
+      "description": "High-high pressure alarm setpoint note changed from HH : 214 to HH: 245",
+      "old_value": "HH : 214",
+      "new_value": "HH: 245"
+    },
+    {
+      "change_type": "removed",
+      "item_type": "label",
+      "page": 1,
+      "description": "The 27-PIT-0001B / 27-PY-0001B* instrument loop (3rd stage HP gas export compressor discharge header) present in PID A does not appear in the visible PID B page 1 text",
+      "old_value": "27-PIT-0001B / 27-PY-0001BA / 27-PY-0001BB",
+      "new_value": null
     }
   ],
   "qa_pairs": [
     {
-      "question": "What is the document title of PID A?",
-      "expected_answer_contains": ["Export Gas Compressor"],
-      "expected_sources": ["pid_a"]
-    },
-    {
-      "question": "What is the main difference between the two document titles?",
-      "expected_answer_contains": ["Lift Gas Compressor", "Export Gas Compressor"],
-      "expected_sources": ["delta_report", "pid_a", "pid_b"]
-    },
-    {
-      "question": "What was the system tag changed from and to?",
+      "question": "What is the compressor service described on PID A's inlet header, and how does it differ on PID B?",
       "expected_answer_contains": ["EXPORT", "LIFT"],
+      "expected_sources": ["pid_a", "pid_b", "delta_report"]
+    },
+    {
+      "question": "What changed about the pressure transmitter tag 26-PIT-9087?",
+      "expected_answer_contains": ["26-PIT-9087", "26-PIT-9077"],
+      "expected_sources": ["delta_report"]
+    },
+    {
+      "question": "What was the relief valve setpoint changed from and to?",
+      "expected_answer_contains": ["225.4", "257"],
       "expected_sources": ["delta_report"]
     }
   ]

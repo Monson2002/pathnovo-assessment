@@ -1,8 +1,33 @@
+import contextvars
 import json
 import logging
 import sys
 from typing import Any, Dict
 from src.config import settings
+
+_correlation_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "correlation_id", default=""
+)
+
+
+def set_correlation_id(correlation_id: str) -> None:
+    """Set the correlation id for all log records emitted in the current context."""
+    _correlation_id_var.set(correlation_id)
+
+
+def get_correlation_id() -> str:
+    """Return the correlation id currently set for this context, if any."""
+    return _correlation_id_var.get()
+
+
+class CorrelationIdFilter(logging.Filter):
+    """Injects the active correlation id (if any) onto every log record."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        cid = _correlation_id_var.get()
+        if cid:
+            record.correlation_id = cid
+        return True
 
 
 class JSONFormatter(logging.Formatter):
@@ -38,6 +63,7 @@ def setup_logging(level: str = settings.log_level) -> None:
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(JSONFormatter())
+    console_handler.addFilter(CorrelationIdFilter())
     root_logger.addHandler(console_handler)
 
 

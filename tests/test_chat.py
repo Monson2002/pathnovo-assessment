@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock
+import hashlib
+from unittest.mock import MagicMock, patch
 from src.canonical.model import (
     BoundingBox,
     CanonicalDocument,
@@ -15,10 +16,30 @@ from src.chat import (
 )
 
 
+def _fake_embedding(text: str, dim: int = 1024) -> list:
+    """Deterministic, offline stand-in for a real embedding vector, used to keep
+    tests hermetic (no network calls, no hangs in sandboxed/offline environments).
+    Matches the real embedding model's dimensionality so it's compatible with any
+    already-provisioned Chroma collection (local or cloud)."""
+    h = hashlib.sha256(text.encode("utf-8")).digest()
+    float_vec = [(b / 255.0) * 2.0 - 1.0 for b in h]
+    repeats = (dim // len(float_vec)) + 1
+    return (float_vec * repeats)[:dim]
+
+
 def test_embedding_generation():
-    vec = get_embedding("Export Gas Compressor")
+    """get_embedding() should call the embedding client and return its vector."""
+    mock_client = MagicMock()
+    mock_client.embeddings.create.return_value.data = [
+        MagicMock(embedding=_fake_embedding("Export Gas Compressor"))
+    ]
+
+    with patch("src.chat.llm.get_embedding_client", return_value=mock_client):
+        vec = get_embedding("Export Gas Compressor", client=mock_client)
+
     assert isinstance(vec, list)
     assert len(vec) > 0
+    mock_client.embeddings.create.assert_called_once()
 
 
 def test_document_index_and_search():
@@ -66,11 +87,12 @@ def test_document_index_and_search():
         "  - **Description**: Modified label from Export Gas Compressor to Lift Gas Compressor\n"
     )
 
-    index = DocumentIndex(persist_dir=None)
-    indexed_count = index.build_index(doc_a, doc_b, delta_report)
-    assert indexed_count >= 3
+    with patch("src.chat.index.get_embedding", side_effect=_fake_embedding):
+        index = DocumentIndex(persist_dir=None)
+        indexed_count = index.build_index(doc_a, doc_b, delta_report)
+        assert indexed_count >= 3
 
-    results = index.search("What changed in the compressor label?", top_k=2)
+        results = index.search("What changed in the compressor label?", top_k=2)
     assert len(results) > 0
     assert "text" in results[0]
 
@@ -113,19 +135,20 @@ def test_answer_engine_grounded_response():
         ],
     )
 
-    index = DocumentIndex(persist_dir=None)
-    index.build_index(doc_a, doc_b, "# Delta Report")
+    with patch("src.chat.index.get_embedding", side_effect=_fake_embedding):
+        index = DocumentIndex(persist_dir=None)
+        index.build_index(doc_a, doc_b, "# Delta Report")
 
-    # Mock LLM Client to return grounded answer with citation
-    mock_client = MagicMock()
-    mock_choice = MagicMock()
-    mock_choice.message.content = (
-        "The title of PID A is Export Gas Compressor. [PID A, Page 1]"
-    )
-    mock_client.chat.completions.create.return_value.choices = [mock_choice]
+        # Mock LLM Client to return grounded answer with citation
+        mock_client = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = (
+            "The title of PID A is Export Gas Compressor. [PID A, Page 1]"
+        )
+        mock_client.chat.completions.create.return_value.choices = [mock_choice]
 
-    engine = AnswerEngine(index=index, llm_client=mock_client)
-    res = engine.answer_question("What is the title of PID A?")
+        engine = AnswerEngine(index=index, llm_client=mock_client)
+        res = engine.answer_question("What is the title of PID A?")
 
     assert isinstance(res, AnswerResult)
     assert res.question == "What is the title of PID A?"

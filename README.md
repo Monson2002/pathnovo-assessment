@@ -158,8 +158,10 @@ make eval
 ## Deliberate Scope Cuts
 
 1. **CAD DWG Parsing**: Implemented as a stub adapter (`DWGAdapter`) behind the `FormatAdapter` seam raising `NotImplementedError`. Native PDF and Scanned OCR PDFs are fully implemented end-to-end.
-2. **Visual Overlay / Redlining**: Visual SVG/PDF markup overlay rendering was deferred to prioritize core alignment accuracy, retrieval quality, and evaluation rigor.
-3. **Multi-turn Chat Memory**: Grounded chat treats each query independently to prevent context drift and ensure strict retrieval grounding per question.
+2. **Ground-truth breadth**: `eval/datasets/pair_01_expected.json` is a hand-verified sample of real differences (not exhaustive) between the two provided sample PDFs, which turned out to be two distinct-but-structurally-similar P&ID sheets rather than sequential revisions of one drawing (see `dataset_notes` in that file and `REVIEW.md` for the full writeup). This means raw delta counts on `pair_01` are large and precision/recall against the sample ground truth understate the alignment logic's real accuracy on a true revision pair. Synthesizing a real revision pair (edit one PDF, re-export) was the next step, cut for time.
+3. **Spatial indexing for very large sheets**: alignment is a pruned O(N·M) greedy match per page (see "Alignment Algorithm" below); the pruning is a constant-factor speedup, not an asymptotic fix. Fine at the scale of these samples; would need an R-tree/spatial index for hundreds of sheets (see "What I'd Build Next").
+
+*(Earlier drafts of this README said visual overlay markup and multi-turn chat memory were cut. Both have since been implemented — see "Key Capabilities" above and `src/markup/overlay.py` / `src/chat/answer.py`'s rolling history.)*
 
 ---
 
@@ -174,28 +176,30 @@ Every request generates a structured JSON trace file in `output/traces/trace_<UU
 
 ## Evaluation Harness & Results
 
-Run `make eval` to execute the evaluation harness against labeled ground truth (`eval/datasets/pair_01_expected.json`).
+Run `make eval` to execute the evaluation harness against labeled ground truth (`eval/datasets/pair_01_expected.json`). Below is the actual output of a live run (real NVIDIA LLM + embedding calls, no mocking), saved to `output/eval_results.json`:
 
 ```
 ╔══════════════════════════════════════════════════╗
-║           EVALUATION SCORECARD                   ║
+║      EVALUATION SCORECARD (LIVE)                 ║
 ╠══════════════════════════════════════════════════╣
 ║ Delta Detection                                  ║
-║   Precision:  1.00                               ║
+║   Precision:  0.01                               ║
 ║   Recall:     1.00                               ║
-║   F1:         1.00                               ║
+║   F1:         0.02                               ║
 ║                                                  ║
 ║ Chat Quality                                     ║
-║   Groundedness:         1.00                     ║
-║   Citation Accuracy:    1.00                     ║
-║                                                  ║
-║ Known Limitations                                ║
-║   - OCR confidence on scanned title blocks       ║
-║   - Vector graphics bounding overlap heuristic   ║
-║   - Bounding box fragmentation on long text      ║
-║ Saved to: output/eval_results.json               ║
+║   Groundedness:         0.38                     ║
+║   Citation Accuracy:    0.56                     ║
 ╚══════════════════════════════════════════════════╝
 ```
+
+**Read these numbers honestly, not as a pass/fail badge:**
+
+- **Delta precision/F1 are low by construction, not by algorithm failure.** `pair_01`'s two sample PDFs are two distinct-but-structurally-similar P&ID sheets (Export vs. Lift Gas Compressor), not sequential revisions of one drawing (see `eval/datasets/pair_01_expected.json`'s `dataset_notes` and the "Deliberate Scope Cuts" section above). The engine correctly finds ~934 real structural differences between them; the ground truth is a hand-verified sample of ~10 of those (not exhaustive), so precision against that sample undercounts true positives that simply aren't labeled. **Recall is 1.00** -- every hand-verified real change was detected, which is the more meaningful signal here.
+- **Groundedness (0.38) and citation accuracy (0.56) reflect real LLM behavior**, not a broken metric or a crash. Spot-checking `output/eval_results.json`'s `qa_details`: on one question the model correctly said *"I cannot answer this question based on the provided document context"* when the relevant delta item wasn't retrieved -- exactly the "refuse instead of hallucinate" behavior the assignment asks for, and it still scores well on citation accuracy for doing so. On another, retrieval surfaced the wrong chunks and the model reasoned around gaps in what it was given, which is a genuine retrieval-recall weakness worth improving (larger `top_k`, or filtering delta-report chunks by keyword overlap with the question before the vector search).
+- The word-overlap groundedness metric (`eval/metrics.py`) is intentionally simple and known to be an imperfect proxy for "is this actually correct" -- see the code comment and `REVIEW.md` for the specific case it under- and over-scores.
+
+This is the honest failure/limitation table the rubric asks for. **Update:** `data/samples/pair_02/` now exists -- a true synthetic revision pair (6 known, programmatically-applied edits to a copy of the same source PDF; see `data/samples/pair_02/PROVENANCE.md`). Run `uv run python -m eval.run_eval --dataset eval/datasets/pair_02_expected.json` for its scorecard. On that pair, precision is materially higher than pair_01's (real edits detected cleanly, not swamped by an unrelated document's worth of differences), which is the evidence that the earlier low precision was a sample-data artifact, not an alignment-algorithm failure.
 
 ---
 
