@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     chroma_db_dir: str = ".chroma"
     log_level: str = "INFO"
 
+    # Chroma Cloud & Remote Vector DB Settings
+    chroma_use_cloud: bool = False
+    chroma_cloud_api_key: Optional[str] = None
+    chroma_tenant: str = "default_tenant"
+    chroma_database: str = "default_database"
+    chroma_host: Optional[str] = None
+    chroma_port: int = 8000
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -8,11 +8,13 @@ logger = get_logger(__name__)
 
 
 def get_llm_client(api_key: Optional[str] = None) -> OpenAI:
-    """Return an OpenAI client configured for NVIDIA Nemotron LLM endpoint."""
+    """Return an OpenAI client configured for NVIDIA Nemotron LLM endpoint with fast timeout."""
     key = api_key or settings.nvidia_api_key or "dummy_key_for_testing"
     return OpenAI(
         base_url=settings.nvidia_base_url,
         api_key=key,
+        timeout=3.0,
+        max_retries=1,
     )
 
 
@@ -32,6 +34,7 @@ def get_embedding(
         response = client.embeddings.create(
             input=[text],
             model=settings.embedding_model,
+            timeout=3.0,
         )
         return response.data[0].embedding
     except Exception as e:

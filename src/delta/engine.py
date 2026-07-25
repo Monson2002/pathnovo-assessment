@@ -1,6 +1,8 @@
+import os
 import re
 from enum import Enum
 from typing import Dict, List, Optional
+
 from pydantic import BaseModel, Field
 from src.canonical.model import BoundingBox, CanonicalDocument, Page
 from src.config import settings
@@ -168,9 +170,33 @@ class DeltaEngine:
         return items
 
     def compute_delta(
-        self, doc_a: CanonicalDocument, doc_b: CanonicalDocument
+        self,
+        doc_a: CanonicalDocument,
+        doc_b: CanonicalDocument,
+        cache_dir: Optional[str] = "output/.cache/delta",
+        use_cache: bool = True,
     ) -> DeltaResult:
-        """Compute structured changes between canonical document A and B."""
+        """Compute structured changes between canonical document A and B with disk caching."""
+        cache_file = None
+        if use_cache and cache_dir:
+            import hashlib
+
+            key_raw = f"{doc_a.metadata.pid}:{doc_a.metadata.filename}:{doc_b.metadata.pid}:{doc_b.metadata.filename}"
+            cache_key = hashlib.sha256(key_raw.encode("utf-8")).hexdigest()
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_file = os.path.join(cache_dir, f"{cache_key}.json")
+
+            if os.path.exists(cache_file):
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        delta_res = DeltaResult.model_validate_json(f.read())
+                    logger.info(f"Loaded cached DeltaResult: {delta_res.summary}")
+                    return delta_res
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to load cached DeltaResult, re-computing: {e}"
+                    )
+
         logger.info(
             f"Computing delta between PID A ({doc_a.metadata.pid}) and PID B ({doc_b.metadata.pid})"
         )
@@ -309,9 +335,22 @@ class DeltaEngine:
             f"({summary['added']} added, {summary['removed']} removed, {summary['modified']} modified)"
         )
 
-        return DeltaResult(
+        result = DeltaResult(
             pid_a=doc_a.metadata.pid,
             pid_b=doc_b.metadata.pid,
             items=filtered_items,
             summary=summary,
         )
+
+        if cache_file:
+            try:
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    f.write(result.model_dump_json(indent=2))
+                logger.info(f"Saved DeltaResult to cache: {cache_file}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to write DeltaResult cache file {cache_file}: {e}"
+                )
+
+        return result

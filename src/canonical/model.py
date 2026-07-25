@@ -60,6 +60,7 @@ class DocumentMetadata(BaseModel):
     format: Literal["native_pdf", "scanned_pdf", "dwg"]
     page_count: int = Field(..., ge=0)
     revision_label: Optional[str] = None
+    is_cached: bool = False
 
 
 class CanonicalDocument(BaseModel):

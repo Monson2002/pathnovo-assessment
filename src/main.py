@@ -37,6 +37,16 @@ def main() -> int:
         action="store_true",
         help="Launch interactive Grounded Chat CLI after computing delta report",
     )
+    parser.add_argument(
+        "--force-reingest",
+        action="store_true",
+        help="Force document re-ingestion and bypass ingestion disk cache",
+    )
+    parser.add_argument(
+        "--force-reindex",
+        action="store_true",
+        help="Force re-generating vector embeddings and re-indexing ChromaDB",
+    )
 
     args = parser.parse_args()
     setup_logging()
@@ -58,26 +68,44 @@ def main() -> int:
     print(f"Document A: {args.pid_a}")
     print(f"Document B: {args.pid_b}\n")
 
+    ingest_cache_dir = os.path.join(args.output_dir, ".cache", "ingest")
+
     try:
         with tracer.span("ingest_documents"):
             logger.info("Stage 1: Ingesting documents")
-            print("Ingesting Document A...")
-            doc_a = detect_and_ingest(args.pid_a, pid=os.path.basename(args.pid_a))
+            doc_a = detect_and_ingest(
+                args.pid_a,
+                pid=os.path.basename(args.pid_a),
+                cache_dir=ingest_cache_dir,
+                use_cache=not args.force_reingest,
+            )
+            status_a = (
+                "loaded from cache"
+                if doc_a.metadata.is_cached
+                else f"parsed via {doc_a.metadata.format}"
+            )
+            print(f"Ingesting Document A... ({status_a})")
             logger.info(
-                f"Ingested PID A: {doc_a.metadata.page_count} page(s) via {doc_a.metadata.format}"
+                f"Ingested PID A: {doc_a.metadata.page_count} page(s) via {doc_a.metadata.format} ({status_a})"
             )
-            print(
-                f"  Ingested {len(doc_a.pages)} page(s) via adapter '{doc_a.metadata.format}'"
-            )
+            print(f"  {len(doc_a.pages)} page(s) processed")
 
-            print("Ingesting Document B...")
-            doc_b = detect_and_ingest(args.pid_b, pid=os.path.basename(args.pid_b))
+            doc_b = detect_and_ingest(
+                args.pid_b,
+                pid=os.path.basename(args.pid_b),
+                cache_dir=ingest_cache_dir,
+                use_cache=not args.force_reingest,
+            )
+            status_b = (
+                "loaded from cache"
+                if doc_b.metadata.is_cached
+                else f"parsed via {doc_b.metadata.format}"
+            )
+            print(f"Ingesting Document B... ({status_b})")
             logger.info(
-                f"Ingested PID B: {doc_b.metadata.page_count} page(s) via {doc_b.metadata.format}"
+                f"Ingested PID B: {doc_b.metadata.page_count} page(s) via {doc_b.metadata.format} ({status_b})"
             )
-            print(
-                f"  Ingested {len(doc_b.pages)} page(s) via adapter '{doc_b.metadata.format}'"
-            )
+            print(f"  {len(doc_b.pages)} page(s) processed")
 
         with tracer.span("compute_delta"):
             logger.info("Stage 2: Computing delta")
@@ -112,7 +140,9 @@ def main() -> int:
                 index = DocumentIndex(
                     persist_dir=os.path.join(args.output_dir, ".chroma")
                 )
-                index.build_index(doc_a, doc_b, md_content)
+                index.build_index(
+                    doc_a, doc_b, md_content, force_reindex=args.force_reindex
+                )
                 chat_engine = AnswerEngine(index=index)
 
                 print(

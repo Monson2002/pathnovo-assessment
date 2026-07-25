@@ -46,6 +46,26 @@ def test_detect_and_ingest():
     if not os.path.exists(SAMPLE_PDF_2):
         pytest.skip("Sample PDF 2 not found")
 
-    doc = detect_and_ingest(SAMPLE_PDF_2, pid="PID_TEST_02")
+    doc = detect_and_ingest(SAMPLE_PDF_2, pid="PID_TEST_02", use_cache=False)
     assert doc.metadata.pid == "PID_TEST_02"
     assert doc.metadata.page_count > 0
+
+
+def test_detect_and_ingest_caching(tmp_path):
+    if not os.path.exists(SAMPLE_PDF_1):
+        pytest.skip("Sample PDF 1 not found")
+
+    cache_dir = str(tmp_path / "cache")
+    # First call: populates cache
+    doc1 = detect_and_ingest(
+        SAMPLE_PDF_1, pid="PID_CACHE_01", cache_dir=cache_dir, use_cache=True
+    )
+    assert doc1.metadata.pid == "PID_CACHE_01"
+
+    # Second call: loads from cache
+    doc2 = detect_and_ingest(
+        SAMPLE_PDF_1, pid="PID_CACHE_01", cache_dir=cache_dir, use_cache=True
+    )
+    assert doc2.metadata.pid == "PID_CACHE_01"
+    assert len(doc1.pages) == len(doc2.pages)
+    assert doc1.pages[0].text_blocks[0].content == doc2.pages[0].text_blocks[0].content
